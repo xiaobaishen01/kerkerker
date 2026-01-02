@@ -2,9 +2,18 @@
 
 import { useState } from "react";
 import { VodSource } from "@/types/drama";
+import { ShortDramaSource } from "@/types/shorts-source";
+import { DailymotionChannelConfig } from "@/types/dailymotion-config";
 import { Modal } from "@/components/Modal";
 import type { VodSourcesTabProps } from "./types";
 import { isSubscriptionUrl } from "@/lib/utils";
+
+// 统一导入预览类型
+interface UnifiedImportPreview {
+  vodSources?: VodSource[];
+  shortsSources?: ShortDramaSource[];
+  dailymotionChannels?: Omit<DailymotionChannelConfig, "id" | "createdAt">[];
+}
 
 export function VodSourcesTab({
   sources,
@@ -13,6 +22,7 @@ export function VodSourcesTab({
   onSelectedKeyChange,
   onShowToast,
   onShowConfirm,
+  unifiedImport,
 }: VodSourcesTabProps) {
   const [editingSource, setEditingSource] = useState<VodSource | null>(null);
   const [isAddMode, setIsAddMode] = useState(false);
@@ -32,8 +42,13 @@ export function VodSourcesTab({
   const [importPassword, setImportPassword] = useState("");
   const [importData, setImportData] = useState("");
   const [importPreview, setImportPreview] = useState<VodSource[] | null>(null);
+  // 统一导入预览（包含所有类型）
+  const [unifiedPreview, setUnifiedPreview] =
+    useState<UnifiedImportPreview | null>(null);
   const [isDecrypting, setIsDecrypting] = useState(false);
   const [decryptError, setDecryptError] = useState("");
+  // 导入模式: "replace" = 替换全部, "merge" = 保留并合并
+  const [importMode, setImportMode] = useState<"replace" | "merge">("merge");
 
   // 重置加密导入弹窗状态
   const resetEncryptedImportModal = () => {
@@ -41,11 +56,13 @@ export function VodSourcesTab({
     setImportPassword("");
     setImportData("");
     setImportPreview(null);
+    setUnifiedPreview(null);
     setIsDecrypting(false);
     setDecryptError("");
+    setImportMode("merge");
   };
 
-  // 解密预览 - 使用服务器端 API（支持 HTTP 环境）
+  // 解密预览 - 统一导入，解析所有类型
   const handleDecryptPreview = async () => {
     if (!importPassword || !importData) {
       setDecryptError("请输入密码和加密数据");
@@ -55,9 +72,9 @@ export function VodSourcesTab({
     setIsDecrypting(true);
     setDecryptError("");
     setImportPreview(null);
+    setUnifiedPreview(null);
 
     try {
-      // 使用服务器端 API 进行解密（不依赖 Web Crypto API）
       const response = await fetch("/api/decrypt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -76,10 +93,26 @@ export function VodSourcesTab({
 
       const payload = result.data;
 
+      // 构建统一预览对象
+      const preview: UnifiedImportPreview = {};
       if (payload.vodSources && payload.vodSources.length > 0) {
+        preview.vodSources = payload.vodSources;
         setImportPreview(payload.vodSources);
+      }
+      if (payload.shortsSources && payload.shortsSources.length > 0) {
+        preview.shortsSources = payload.shortsSources;
+      }
+      if (
+        payload.dailymotionChannels &&
+        payload.dailymotionChannels.length > 0
+      ) {
+        preview.dailymotionChannels = payload.dailymotionChannels;
+      }
+
+      if (Object.keys(preview).length === 0) {
+        setDecryptError("配置中没有任何可导入的数据");
       } else {
-        setDecryptError("配置中没有 VOD 源数据");
+        setUnifiedPreview(preview);
       }
     } catch (error) {
       setDecryptError(error instanceof Error ? error.message : "解密失败");
@@ -88,41 +121,192 @@ export function VodSourcesTab({
     }
   };
 
-  // 确认导入加密配置
+  // 统一导入 - 导入所有类型的源
   const handleConfirmEncryptedImport = async () => {
-    if (!importPreview || importPreview.length === 0) {
-      return;
-    }
+    if (!unifiedPreview) return;
+
+    const results: string[] = [];
+    let hasError = false;
 
     try {
-      const response = await fetch("/api/vod-sources", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sources: importPreview,
-          selected: importPreview[0]?.key || null,
-        }),
-      });
+      // 1. 导入 VOD 源
+      if (unifiedPreview.vodSources && unifiedPreview.vodSources.length > 0) {
+        let finalSources: VodSource[];
+        let finalSelected: string | null;
 
-      const result = await response.json();
+        if (importMode === "merge") {
+          // 合并模式：保留现有，跳过重复（按 key 判断）
+          const existingKeys = new Set(sources.map((s) => s.key));
+          const newSources = unifiedPreview.vodSources.filter(
+            (s) => !existingKeys.has(s.key)
+          );
+          finalSources = [...sources, ...newSources];
+          finalSelected = selectedKey || finalSources[0]?.key || null;
+          results.push(
+            `视频源 +${newSources.length} 个${
+              newSources.length < unifiedPreview.vodSources.length
+                ? `（跳过 ${
+                    unifiedPreview.vodSources.length - newSources.length
+                  } 个重复）`
+                : ""
+            }`
+          );
+        } else {
+          // 替换模式
+          finalSources = unifiedPreview.vodSources;
+          finalSelected = unifiedPreview.vodSources[0]?.key || null;
+          results.push(
+            `视频源 ${unifiedPreview.vodSources.length} 个（已替换）`
+          );
+        }
 
-      if (result.code !== 200) {
-        onShowToast({
-          message: result.message || "导入视频源失败",
-          type: "error",
+        const response = await fetch("/api/vod-sources", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sources: finalSources,
+            selected: finalSelected,
+          }),
         });
-        return;
+        const result = await response.json();
+        if (result.code === 200) {
+          onSourcesChange(finalSources);
+          if (finalSelected) onSelectedKeyChange(finalSelected);
+        } else {
+          hasError = true;
+        }
       }
 
-      onSourcesChange(importPreview);
-      if (importPreview.length > 0) {
-        onSelectedKeyChange(importPreview[0].key);
+      // 2. 导入短剧源
+      if (
+        unifiedPreview.shortsSources &&
+        unifiedPreview.shortsSources.length > 0 &&
+        unifiedImport
+      ) {
+        // 先获取当前短剧源
+        const shortsResponse = await fetch("/api/shorts-sources");
+        const shortsData = await shortsResponse.json();
+        const existingShortsSources: ShortDramaSource[] =
+          shortsData.data?.sources || [];
+        const existingShortsSelected: string =
+          shortsData.data?.selected?.key || "";
+
+        let finalSources: ShortDramaSource[];
+        let finalSelected: string | null;
+
+        if (importMode === "merge") {
+          const existingKeys = new Set(existingShortsSources.map((s) => s.key));
+          const newSources = unifiedPreview.shortsSources.filter(
+            (s) => !existingKeys.has(s.key)
+          );
+          finalSources = [...existingShortsSources, ...newSources];
+          finalSelected =
+            existingShortsSelected || finalSources[0]?.key || null;
+          results.push(
+            `短剧源 +${newSources.length} 个${
+              newSources.length < unifiedPreview.shortsSources.length
+                ? `（跳过 ${
+                    unifiedPreview.shortsSources.length - newSources.length
+                  } 个重复）`
+                : ""
+            }`
+          );
+        } else {
+          finalSources = unifiedPreview.shortsSources;
+          finalSelected = unifiedPreview.shortsSources[0]?.key || null;
+          results.push(
+            `短剧源 ${unifiedPreview.shortsSources.length} 个（已替换）`
+          );
+        }
+
+        const response = await fetch("/api/shorts-sources", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sources: finalSources,
+            selected: finalSelected,
+          }),
+        });
+        const result = await response.json();
+        if (result.code === 200) {
+          unifiedImport.onShortsSourcesImport(
+            finalSources,
+            finalSelected || undefined
+          );
+        } else {
+          hasError = true;
+        }
       }
 
-      onShowToast({
-        message: `已成功导入 ${importPreview.length} 个视频源`,
-        type: "success",
-      });
+      // 3. 导入 Dailymotion 频道
+      if (
+        unifiedPreview.dailymotionChannels &&
+        unifiedPreview.dailymotionChannels.length > 0 &&
+        unifiedImport
+      ) {
+        // 获取现有频道
+        const dmResponse = await fetch("/api/dailymotion-config");
+        const dmData = await dmResponse.json();
+        const existingChannels: DailymotionChannelConfig[] =
+          dmData.data?.channels || [];
+        const existingUsernames = new Set(
+          existingChannels.map((c) => c.username)
+        );
+
+        if (importMode === "replace") {
+          // 替换模式：先清空再添加
+          for (const channel of existingChannels) {
+            await fetch("/api/dailymotion-config", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "delete", id: channel.id }),
+            });
+          }
+          existingUsernames.clear();
+        }
+
+        let addedCount = 0;
+        let skippedCount = 0;
+        for (const channel of unifiedPreview.dailymotionChannels) {
+          if (existingUsernames.has(channel.username)) {
+            skippedCount++;
+            continue;
+          }
+          const response = await fetch("/api/dailymotion-config", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "add", ...channel }),
+          });
+          const result = await response.json();
+          if (result.code === 200) {
+            unifiedImport.onDailymotionImport(
+              result.data.channels,
+              result.data.defaultChannelId
+            );
+            existingUsernames.add(channel.username);
+            addedCount++;
+          }
+        }
+        if (addedCount > 0 || skippedCount > 0) {
+          const msg =
+            importMode === "merge"
+              ? `Dailymotion +${addedCount} 个${
+                  skippedCount > 0 ? `（跳过 ${skippedCount} 个重复）` : ""
+                }`
+              : `Dailymotion ${addedCount} 个（已替换）`;
+          results.push(msg);
+        }
+      }
+
+      if (results.length > 0) {
+        onShowToast({
+          message: `✅ 导入成功: ${results.join("、")}`,
+          type: "success",
+        });
+      } else if (hasError) {
+        onShowToast({ message: "导入失败，请重试", type: "error" });
+      }
+
       resetEncryptedImportModal();
     } catch (error) {
       console.error("导入失败:", error);
@@ -257,33 +441,50 @@ export function VodSourcesTab({
     }
   };
 
+  // 删除所有视频源
+  const handleDeleteAll = () => {
+    if (sources.length === 0) {
+      onShowToast({ message: "没有可删除的视频源", type: "warning" });
+      return;
+    }
+
+    onShowConfirm({
+      title: "清空所有视频源",
+      message: `确定要删除所有 ${sources.length} 个视频源吗？此操作不可撤销。`,
+      onConfirm: async () => {
+        try {
+          const response = await fetch("/api/vod-sources", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sources: [],
+              selected: null,
+            }),
+          });
+
+          const result = await response.json();
+
+          if (result.code === 200) {
+            onSourcesChange([]);
+            onSelectedKeyChange("");
+            onShowToast({ message: "已清空所有视频源", type: "success" });
+          } else {
+            onShowToast({
+              message: result.message || "清空失败",
+              type: "error",
+            });
+          }
+        } catch (error) {
+          console.error("清空视频源失败:", error);
+          onShowToast({ message: "清空失败", type: "error" });
+        }
+      },
+      danger: true,
+    });
+  };
+
   return (
     <div className="space-y-6">
-      {/* Actions */}
-      <div className="flex gap-4 flex-wrap">
-        <button
-          onClick={() => setShowEncryptedImportModal(true)}
-          className="px-6 py-2 bg-[#E50914] hover:bg-[#B20710] text-white rounded-lg transition font-medium flex items-center gap-2"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          导入订阅配置
-        </button>
-      </div>
-
       {/* Edit/Add Modal */}
       <Modal
         isOpen={!!(editingSource || isAddMode)}
@@ -408,7 +609,61 @@ export function VodSourcesTab({
 
       {/* Sources List */}
       <div className="bg-[#1a1a1a] rounded-xl p-6 border border-[#333]">
-        <h2 className="text-xl font-bold text-white mb-4">已配置的视频源</h2>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-bold text-white">已配置的视频源</h2>
+            {sources.length > 0 && (
+              <span className="px-2 py-1 bg-[#E50914] text-white text-xs font-medium rounded-full">
+                {sources.length} 个
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowEncryptedImportModal(true)}
+              className="px-4 py-2 bg-[#E50914] hover:bg-[#B20710] text-white rounded-lg transition font-medium text-sm flex items-center gap-2"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              导入配置
+            </button>
+            {sources.length > 0 && (
+              <button
+                onClick={handleDeleteAll}
+                className="px-4 py-2 bg-[#333] hover:bg-red-600 text-slate-300 hover:text-white rounded-lg transition font-medium text-sm flex items-center gap-2"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="3 6 5 6 21 6" />
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                </svg>
+                清空全部
+              </button>
+            )}
+          </div>
+        </div>
         <div className="space-y-3">
           {sources.map((source) => (
             <div
@@ -479,8 +734,9 @@ export function VodSourcesTab({
           ))}
           {sources.length === 0 && (
             <div className="text-center py-12 text-slate-400">
-              <p className="text-lg mb-2">📺 暂无视频源配置</p>
-              <p className="text-sm">请点击上方「导入订阅配置」按钮导入配置</p>
+              <div className="text-5xl mb-4">📺</div>
+              <p className="text-lg mb-2">暂无视频源配置</p>
+              <p className="text-sm">点击上方「导入配置」按钮导入配置</p>
             </div>
           )}
         </div>
@@ -537,37 +793,145 @@ export function VodSourcesTab({
             {isDecrypting ? "解密中..." : "🔓 解密预览"}
           </button>
 
-          {importPreview && importPreview.length > 0 && (
+          {unifiedPreview && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium text-slate-300">
-                  预览 ({importPreview.length} 个视频源)
-                </h4>
-                <span className="text-xs text-green-400">✅ 解密成功</span>
+                <h4 className="text-sm font-medium text-slate-300">解密成功</h4>
+                <span className="text-xs text-green-400">✅ 包含以下配置</span>
               </div>
-              <div className="max-h-48 overflow-y-auto space-y-2 p-3 bg-slate-900/50 rounded-lg border border-slate-700">
-                {importPreview.map((source, index) => (
-                  <div
-                    key={source.key || index}
-                    className="flex items-center justify-between p-2 bg-slate-800/50 rounded"
-                  >
-                    <div>
-                      <span className="text-white">{source.name}</span>
-                      <span className="text-slate-500 text-xs ml-2">
-                        {source.key}
-                      </span>
+
+              {/* 统一预览列表 */}
+              <div className="max-h-64 overflow-y-auto space-y-3 p-3 bg-[#141414] rounded-lg border border-[#333]">
+                {/* VOD 源 */}
+                {unifiedPreview.vodSources &&
+                  unifiedPreview.vodSources.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[#E50914]">📺</span>
+                        <span className="text-white font-medium">
+                          视频源 ({unifiedPreview.vodSources.length} 个)
+                        </span>
+                      </div>
+                      <div className="pl-6 space-y-1">
+                        {unifiedPreview.vodSources
+                          .slice(0, 3)
+                          .map((source, idx) => (
+                            <div
+                              key={source.key || idx}
+                              className="text-sm text-slate-400"
+                            >
+                              • {source.name}
+                            </div>
+                          ))}
+                        {unifiedPreview.vodSources.length > 3 && (
+                          <div className="text-xs text-slate-500">
+                            ... 还有 {unifiedPreview.vodSources.length - 3} 个
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <span className="text-xs text-slate-400">
-                      #{source.priority || 0}
-                    </span>
-                  </div>
-                ))}
+                  )}
+
+                {/* 短剧源 */}
+                {unifiedPreview.shortsSources &&
+                  unifiedPreview.shortsSources.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[#E50914]">🎬</span>
+                        <span className="text-white font-medium">
+                          短剧源 ({unifiedPreview.shortsSources.length} 个)
+                        </span>
+                      </div>
+                      <div className="pl-6 space-y-1">
+                        {unifiedPreview.shortsSources
+                          .slice(0, 3)
+                          .map((source, idx) => (
+                            <div
+                              key={source.key || idx}
+                              className="text-sm text-slate-400"
+                            >
+                              • {source.name}
+                            </div>
+                          ))}
+                        {unifiedPreview.shortsSources.length > 3 && (
+                          <div className="text-xs text-slate-500">
+                            ... 还有 {unifiedPreview.shortsSources.length - 3}{" "}
+                            个
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                {/* Dailymotion 频道 */}
+                {unifiedPreview.dailymotionChannels &&
+                  unifiedPreview.dailymotionChannels.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[#E50914]">📹</span>
+                        <span className="text-white font-medium">
+                          Dailymotion 频道 (
+                          {unifiedPreview.dailymotionChannels.length} 个)
+                        </span>
+                      </div>
+                      <div className="pl-6 space-y-1">
+                        {unifiedPreview.dailymotionChannels
+                          .slice(0, 3)
+                          .map((channel, idx) => (
+                            <div
+                              key={channel.username || idx}
+                              className="text-sm text-slate-400"
+                            >
+                              • {channel.displayName} (@{channel.username})
+                            </div>
+                          ))}
+                        {unifiedPreview.dailymotionChannels.length > 3 && (
+                          <div className="text-xs text-slate-500">
+                            ... 还有{" "}
+                            {unifiedPreview.dailymotionChannels.length - 3} 个
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
               </div>
+
+              {/* 导入模式选择 */}
+              <div className="p-3 bg-[#141414] rounded-lg border border-[#333]">
+                <div className="text-sm font-medium text-slate-300 mb-2">
+                  导入模式
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setImportMode("merge")}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm transition ${
+                      importMode === "merge"
+                        ? "bg-[#E50914] text-white"
+                        : "bg-[#333] text-slate-300 hover:bg-[#444]"
+                    }`}
+                  >
+                    <div className="font-medium">🔀 合并</div>
+                    <div className="text-xs opacity-70">保留现有，跳过重复</div>
+                  </button>
+                  <button
+                    onClick={() => setImportMode("replace")}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm transition ${
+                      importMode === "replace"
+                        ? "bg-orange-600 text-white"
+                        : "bg-[#333] text-slate-300 hover:bg-[#444]"
+                    }`}
+                  >
+                    <div className="font-medium">🔄 替换</div>
+                    <div className="text-xs opacity-70">清空后重新导入</div>
+                  </button>
+                </div>
+              </div>
+
               <button
                 onClick={handleConfirmEncryptedImport}
                 className="w-full px-4 py-2 bg-[#46d369] hover:bg-[#3cb85e] text-black font-medium rounded-lg transition"
               >
-                ✅ 确认导入
+                ✅ {importMode === "merge" ? "合并导入" : "替换导入"}
               </button>
             </div>
           )}

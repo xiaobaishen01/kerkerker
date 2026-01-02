@@ -3,23 +3,8 @@
 import { useState } from "react";
 import { Plus, Edit2, Trash2, Star, Download, X, Lock } from "lucide-react";
 import type { DailymotionChannelConfig } from "@/types/dailymotion-config";
+import type { DailymotionChannelsTabProps } from "./types";
 import { isSubscriptionUrl } from "@/lib/utils";
-
-interface Props {
-  channels: DailymotionChannelConfig[];
-  defaultChannelId?: string;
-  onChannelsChange: (
-    channels: DailymotionChannelConfig[],
-    defaultChannelId?: string
-  ) => void;
-  onShowToast: (toast: { message: string; type: "success" | "error" }) => void;
-  onShowConfirm: (confirm: {
-    title: string;
-    message: string;
-    onConfirm: () => void;
-    danger?: boolean;
-  }) => void;
-}
 
 export function DailymotionChannelsTab({
   channels,
@@ -27,7 +12,8 @@ export function DailymotionChannelsTab({
   onChannelsChange,
   onShowToast,
   onShowConfirm,
-}: Props) {
+  unifiedImport,
+}: DailymotionChannelsTabProps) {
   const [showModal, setShowModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -169,6 +155,39 @@ export function DailymotionChannelsTab({
         type: "error",
       });
     }
+  };
+
+  // 清空全部频道
+  const handleDeleteAll = () => {
+    if (channels.length === 0) {
+      onShowToast({ message: "暂无频道可清空", type: "error" });
+      return;
+    }
+
+    onShowConfirm({
+      title: "清空全部频道",
+      message: `确定要清空全部 ${channels.length} 个 Dailymotion 频道吗？此操作不可恢复！`,
+      danger: true,
+      onConfirm: async () => {
+        try {
+          // 逐个删除所有频道
+          for (const channel of channels) {
+            await fetch("/api/dailymotion-config", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                action: "delete",
+                id: channel.id,
+              }),
+            });
+          }
+          onChannelsChange([], undefined);
+          onShowToast({ message: "已清空全部频道", type: "success" });
+        } catch (error) {
+          onShowToast({ message: "清空失败", type: "error" });
+        }
+      },
+    });
   };
 
   const resetForm = () => {
@@ -317,193 +336,210 @@ export function DailymotionChannelsTab({
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-xl font-bold text-white">Dailymotion 频道管理</h2>
-          <p className="text-slate-400 text-sm mt-1">
-            管理 Dailymotion 频道列表
-          </p>
-        </div>
-        <div className="flex gap-3 flex-wrap">
-          <button
-            onClick={() => setShowEncryptedImportModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-lg transition"
-          >
-            <Download size={18} />
-            导入订阅配置
-          </button>
-        </div>
-      </div>
-
-      {/* Add/Edit Modal */}
-      {showModal && (
-        <div
-          className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
-          onClick={resetForm}
-        >
-          <div
-            className="bg-slate-900 rounded-xl max-w-2xl w-full border border-slate-700 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-slate-700">
-              <h3 className="text-xl font-bold text-white">
-                {editingId ? "编辑频道" : "添加新频道"}
-              </h3>
-              <button
-                onClick={resetForm}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    用户名 <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.username}
-                    onChange={(e) =>
-                      setFormData({ ...formData, username: e.target.value })
-                    }
-                    placeholder="例如: kchow125"
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    显示名称 <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.displayName}
-                    onChange={(e) =>
-                      setFormData({ ...formData, displayName: e.target.value })
-                    }
-                    placeholder="例如: KChow125"
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium text-slate-300 mb-2">
-                    头像 URL（可选）
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.avatarUrl}
-                    onChange={(e) =>
-                      setFormData({ ...formData, avatarUrl: e.target.value })
-                    }
-                    placeholder="https://..."
-                    className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex justify-end gap-3 p-6 border-t border-slate-700">
-              <button
-                onClick={resetForm}
-                className="px-6 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition"
-              >
-                取消
-              </button>
-              <button
-                onClick={editingId ? handleUpdate : handleAdd}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition"
-              >
-                {editingId ? "更新" : "添加"}
-              </button>
-            </div>
+      {/* Sources List Container - matching VodSourcesTab */}
+      <div className="bg-[#1a1a1a] rounded-xl p-6 border border-[#333]">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-bold text-white">
+              Dailymotion 频道管理
+            </h2>
+            {channels.length > 0 && (
+              <span className="px-2 py-1 bg-[#E50914] text-white text-xs font-medium rounded-full">
+                {channels.length} 个
+              </span>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* Channels List */}
-      <div className="space-y-3">
-        {channels.length === 0 ? (
-          <div className="text-center py-12 text-slate-400">
-            <p>暂无频道配置</p>
-            <p className="text-sm mt-2">
-              点击上方&ldquo;添加频道&rdquo;按钮开始配置
-            </p>
-          </div>
-        ) : (
-          channels.map((channel) => (
-            <div
-              key={channel.id}
-              className="bg-slate-800/30 rounded-lg p-4 border border-slate-700 hover:border-slate-600 transition"
+          <div className="flex gap-2">
+            {channels.length > 0 && (
+              <button
+                onClick={handleDeleteAll}
+                className="px-4 py-2 bg-[#333] hover:bg-red-600 text-white rounded-lg transition font-medium text-sm flex items-center gap-2"
+              >
+                <Trash2 size={16} />
+                清空全部
+              </button>
+            )}
+            <button
+              onClick={() => setShowEncryptedImportModal(true)}
+              className="px-4 py-2 bg-[#E50914] hover:bg-[#B20710] text-white rounded-lg transition font-medium text-sm flex items-center gap-2"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  {channel.avatarUrl ? (
-                    <img
-                      src={channel.avatarUrl}
-                      alt={channel.displayName}
-                      className="w-12 h-12 rounded-full"
+              <Download size={16} />
+              导入配置
+            </button>
+          </div>
+        </div>
+
+        {/* Add/Edit Modal */}
+        {showModal && (
+          <div
+            className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4"
+            onClick={resetForm}
+          >
+            <div
+              className="bg-[#1a1a1a] rounded-xl max-w-2xl w-full border border-[#333] shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between p-6 border-b border-[#333]">
+                <h3 className="text-xl font-bold text-white">
+                  {editingId ? "编辑频道" : "添加新频道"}
+                </h3>
+                <button
+                  onClick={resetForm}
+                  className="p-2 text-slate-400 hover:text-white hover:bg-[#333] rounded-lg transition"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-6 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      用户名 <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.username}
+                      onChange={(e) =>
+                        setFormData({ ...formData, username: e.target.value })
+                      }
+                      placeholder="例如: kchow125"
+                      className="w-full px-4 py-2 bg-slate-900/50 border border-[#333] rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-[#E50914]"
                     />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center text-slate-400">
-                      {channel.displayName.charAt(0).toUpperCase()}
-                    </div>
-                  )}
+                  </div>
 
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-white font-semibold">
-                        {channel.displayName}
-                      </h3>
-                      {channel.id === defaultChannelId && (
-                        <span className="flex items-center gap-1 text-xs text-yellow-400 bg-yellow-400/10 px-2 py-1 rounded">
-                          <Star size={12} fill="currentColor" />
-                          默认
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-slate-400 text-sm">
-                      @{channel.username}
-                    </p>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      显示名称 <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.displayName}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          displayName: e.target.value,
+                        })
+                      }
+                      placeholder="例如: KChow125"
+                      className="w-full px-4 py-2 bg-slate-900/50 border border-[#333] rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-[#E50914]"
+                    />
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-slate-300 mb-2">
+                      头像 URL（可选）
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.avatarUrl}
+                      onChange={(e) =>
+                        setFormData({ ...formData, avatarUrl: e.target.value })
+                      }
+                      placeholder="https://..."
+                      className="w-full px-4 py-2 bg-slate-900/50 border border-[#333] rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-[#E50914]"
+                    />
                   </div>
                 </div>
+              </div>
 
-                <div className="flex items-center gap-2">
-                  {channel.id !== defaultChannelId && (
-                    <button
-                      onClick={() => handleSetDefault(channel.id)}
-                      className="p-2 text-slate-400 hover:text-yellow-400 hover:bg-slate-700 rounded-lg transition"
-                      title="设为默认"
-                    >
-                      <Star size={18} />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => startEdit(channel)}
-                    className="p-2 text-slate-400 hover:text-blue-400 hover:bg-slate-700 rounded-lg transition"
-                    title="编辑"
-                  >
-                    <Edit2 size={18} />
-                  </button>
-                  <button
-                    onClick={() => handleDelete(channel)}
-                    className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition"
-                    title="删除"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
+              {/* Modal Footer */}
+              <div className="flex justify-end gap-3 p-6 border-t border-[#333]">
+                <button
+                  onClick={resetForm}
+                  className="px-6 py-2 bg-[#333] hover:bg-[#444] text-white rounded-lg transition"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={editingId ? handleUpdate : handleAdd}
+                  className="px-6 py-2 bg-[#E50914] hover:bg-[#B20710] text-white rounded-lg transition"
+                >
+                  {editingId ? "更新" : "添加"}
+                </button>
               </div>
             </div>
-          ))
+          </div>
         )}
+
+        {/* Channels List */}
+        <div className="space-y-3">
+          {channels.length === 0 ? (
+            <div className="text-center py-12 text-slate-400">
+              <div className="text-5xl mb-4">📺</div>
+              <p className="text-lg mb-2">暂无频道配置</p>
+              <p className="text-sm">点击上方「导入配置」按钮开始配置</p>
+            </div>
+          ) : (
+            channels.map((channel) => (
+              <div
+                key={channel.id}
+                className={`p-4 rounded-lg border transition ${
+                  channel.id === defaultChannelId
+                    ? "bg-[#E50914]/10 border-[#E50914]"
+                    : "bg-[#141414] border-[#333] hover:border-[#555]"
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    {channel.avatarUrl ? (
+                      <img
+                        src={channel.avatarUrl}
+                        alt={channel.displayName}
+                        className="w-12 h-12 rounded-full"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center text-slate-400">
+                        {channel.displayName.charAt(0).toUpperCase()}
+                      </div>
+                    )}
+
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="text-white font-semibold">
+                          {channel.displayName}
+                        </h3>
+                        {channel.id === defaultChannelId && (
+                          <span className="text-xs px-2 py-1 bg-[#E50914] text-white rounded">
+                            默认
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-slate-400 text-sm">
+                        @{channel.username}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {channel.id !== defaultChannelId && (
+                      <button
+                        onClick={() => handleSetDefault(channel.id)}
+                        className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition"
+                      >
+                        设为默认
+                      </button>
+                    )}
+                    <button
+                      onClick={() => startEdit(channel)}
+                      className="px-3 py-1 bg-[#E50914] hover:bg-[#B20710] text-white text-sm rounded transition"
+                    >
+                      编辑
+                    </button>
+                    <button
+                      onClick={() => handleDelete(channel)}
+                      className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition"
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
       </div>
 
       {/* Encrypted Import Modal */}
@@ -513,14 +549,14 @@ export function DailymotionChannelsTab({
           onClick={resetEncryptedImportModal}
         >
           <div
-            className="bg-slate-900 rounded-xl max-w-2xl w-full border border-slate-700 shadow-2xl"
+            className="bg-[#1a1a1a] rounded-xl max-w-2xl w-full border border-[#333] shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between p-6 border-b border-slate-700">
-              <h3 className="text-xl font-bold text-white">导入加密配置</h3>
+            <div className="flex items-center justify-between p-6 border-b border-[#333]">
+              <h3 className="text-xl font-bold text-white">导入订阅配置</h3>
               <button
                 onClick={resetEncryptedImportModal}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition"
+                className="p-2 text-slate-400 hover:text-white hover:bg-[#333] rounded-lg transition"
               >
                 <X size={20} />
               </button>
@@ -535,7 +571,7 @@ export function DailymotionChannelsTab({
                   type="password"
                   value={importPassword}
                   onChange={(e) => setImportPassword(e.target.value)}
-                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                  className="w-full px-4 py-2 bg-slate-900/50 border border-[#333] rounded-lg text-white placeholder-slate-500 focus:outline-none focus:border-[#E50914]"
                   placeholder="输入加密时使用的密码"
                 />
               </div>
@@ -548,7 +584,7 @@ export function DailymotionChannelsTab({
                   value={importData}
                   onChange={(e) => setImportData(e.target.value)}
                   rows={4}
-                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white font-mono text-sm placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none"
+                  className="w-full px-4 py-2 bg-slate-900/50 border border-[#333] rounded-lg text-white font-mono text-sm placeholder-slate-500 focus:outline-none focus:border-[#E50914] resize-none"
                   placeholder="粘贴加密字符串，或输入订阅 URL (https://...)"
                 />
               </div>
@@ -562,7 +598,7 @@ export function DailymotionChannelsTab({
               <button
                 onClick={handleDecryptPreview}
                 disabled={isDecrypting || !importPassword || !importData}
-                className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg transition font-medium"
+                className="w-full px-4 py-2 bg-[#E50914] hover:bg-[#B20710] disabled:bg-[#333] disabled:cursor-not-allowed text-white rounded-lg transition font-medium"
               >
                 {isDecrypting ? "解密中..." : "🔓 解密预览"}
               </button>
@@ -575,7 +611,7 @@ export function DailymotionChannelsTab({
                     </h4>
                     <span className="text-xs text-green-400">✅ 解密成功</span>
                   </div>
-                  <div className="max-h-48 overflow-y-auto space-y-2 p-3 bg-slate-800/50 rounded-lg border border-slate-700">
+                  <div className="max-h-48 overflow-y-auto space-y-2 p-3 bg-[#141414] rounded-lg border border-[#333]">
                     {importPreview.map((channel, index) => (
                       <div
                         key={channel.username || index}
@@ -597,7 +633,7 @@ export function DailymotionChannelsTab({
                   </div>
                   <button
                     onClick={handleConfirmEncryptedImport}
-                    className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition font-medium"
+                    className="w-full px-4 py-2 bg-[#46d369] hover:bg-[#3cb85e] text-black font-medium rounded-lg transition"
                   >
                     ✅ 确认导入
                   </button>

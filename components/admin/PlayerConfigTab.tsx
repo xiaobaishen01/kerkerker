@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Modal } from '@/components/Modal';
-import type { PlayerConfig, IframePlayer } from '@/app/api/player-config/route';
-import type { PlayerConfigTabProps } from './types';
+import { useState } from "react";
+import { Modal } from "@/components/Modal";
+import type { PlayerConfig, IframePlayer } from "@/app/api/player-config/route";
+import type { PlayerConfigTabProps } from "./types";
 
 export function PlayerConfigTab({
   playerConfig,
@@ -14,9 +14,9 @@ export function PlayerConfigTab({
   const [editingPlayer, setEditingPlayer] = useState<IframePlayer | null>(null);
   const [isAddingPlayer, setIsAddingPlayer] = useState(false);
   const [playerFormData, setPlayerFormData] = useState<IframePlayer>({
-    id: '',
-    name: '',
-    url: '',
+    id: "",
+    name: "",
+    url: "",
     priority: 1,
     timeout: 10000,
     enabled: true,
@@ -24,9 +24,9 @@ export function PlayerConfigTab({
 
   const handleSavePlayerConfig = async (newConfig: PlayerConfig) => {
     try {
-      const response = await fetch('/api/player-config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/player-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(newConfig),
       });
 
@@ -34,20 +34,20 @@ export function PlayerConfigTab({
 
       if (result.code === 200) {
         onConfigChange(newConfig);
-        onShowToast({ message: '保存成功', type: 'success' });
+        onShowToast({ message: "保存成功", type: "success" });
       } else {
         onShowToast({
-          message: result.message || '保存失败',
-          type: 'error',
+          message: result.message || "保存失败",
+          type: "error",
         });
       }
     } catch (error) {
-      console.error('保存播放器配置失败:', error);
-      onShowToast({ message: '保存失败', type: 'error' });
+      console.error("保存播放器配置失败:", error);
+      onShowToast({ message: "保存失败", type: "error" });
     }
   };
 
-  const handlePlayerModeChange = (mode: 'iframe' | 'local' | 'auto') => {
+  const handlePlayerModeChange = (mode: "iframe" | "local" | "auto") => {
     handleSavePlayerConfig({ ...playerConfig, mode });
   };
 
@@ -58,8 +58,8 @@ export function PlayerConfigTab({
   const handleAddPlayer = () => {
     setPlayerFormData({
       id: `player${Date.now()}`,
-      name: '',
-      url: '',
+      name: "",
+      url: "",
       priority: playerConfig.iframePlayers.length + 1,
       timeout: 10000,
       enabled: true,
@@ -79,13 +79,16 @@ export function PlayerConfigTab({
       (p) => p.id === playerId
     );
     onShowConfirm({
-      title: '删除播放器',
+      title: "删除播放器",
       message: `确定要删除「${playerToDelete?.name}」吗？`,
       onConfirm: async () => {
         const newPlayers = playerConfig.iframePlayers.filter(
           (p) => p.id !== playerId
         );
-        await handleSavePlayerConfig({ ...playerConfig, iframePlayers: newPlayers });
+        await handleSavePlayerConfig({
+          ...playerConfig,
+          iframePlayers: newPlayers,
+        });
       },
       danger: true,
     });
@@ -93,7 +96,7 @@ export function PlayerConfigTab({
 
   const handleSavePlayer = async () => {
     if (!playerFormData.name || !playerFormData.url) {
-      onShowToast({ message: '请填写完整信息', type: 'warning' });
+      onShowToast({ message: "请填写完整信息", type: "warning" });
       return;
     }
 
@@ -107,7 +110,10 @@ export function PlayerConfigTab({
       );
     }
 
-    await handleSavePlayerConfig({ ...playerConfig, iframePlayers: newPlayers });
+    await handleSavePlayerConfig({
+      ...playerConfig,
+      iframePlayers: newPlayers,
+    });
     handleCancelPlayerEdit();
   };
 
@@ -124,7 +130,7 @@ export function PlayerConfigTab({
   };
 
   const handleLocalPlayerSettingChange = (
-    key: keyof PlayerConfig['localPlayerSettings'],
+    key: keyof PlayerConfig["localPlayerSettings"],
     value: boolean | number | string
   ) => {
     handleSavePlayerConfig({
@@ -139,13 +145,13 @@ export function PlayerConfigTab({
   // 重置播放器配置（恢复默认）
   const handleResetPlayers = () => {
     onShowConfirm({
-      title: '重置播放器配置',
+      title: "重置播放器配置",
       message:
-        '确定要重置播放器配置吗？这将恢复到系统默认配置，当前自定义的播放器将被删除。',
+        "确定要重置播放器配置吗？这将恢复到系统默认配置，当前自定义的播放器将被删除。",
       onConfirm: async () => {
         try {
           // 获取默认配置
-          const response = await fetch('/api/player-config/default');
+          const response = await fetch("/api/player-config/default");
           const result = await response.json();
 
           if (result.code === 200 && result.data) {
@@ -154,13 +160,16 @@ export function PlayerConfigTab({
               iframePlayers: result.data.iframePlayers,
               localPlayerSettings: result.data.localPlayerSettings,
             });
-            onShowToast({ message: '已重置为默认配置', type: 'success' });
+            onShowToast({ message: "已重置为默认配置", type: "success" });
           } else {
-            onShowToast({ message: result.message || '重置失败', type: 'error' });
+            onShowToast({
+              message: result.message || "重置失败",
+              type: "error",
+            });
           }
         } catch (error) {
-          console.error('重置播放器配置失败:', error);
-          onShowToast({ message: '重置失败', type: 'error' });
+          console.error("重置播放器配置失败:", error);
+          onShowToast({ message: "重置失败", type: "error" });
         }
       },
       danger: true,
@@ -169,7 +178,7 @@ export function PlayerConfigTab({
 
   return (
     <div className="space-y-6">
-      <div className="bg-slate-800/50 backdrop-blur-sm rounded-xl p-6 border border-slate-700">
+      <div className="bg-[#1a1a1a] rounded-xl p-6 border border-[#333]">
         <h2 className="text-xl font-bold text-white mb-6">播放器配置</h2>
 
         {/* 播放器模式选择 */}
@@ -177,11 +186,11 @@ export function PlayerConfigTab({
           <h3 className="text-white font-medium mb-3">播放器模式</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <button
-              onClick={() => handlePlayerModeChange('iframe')}
+              onClick={() => handlePlayerModeChange("iframe")}
               className={`p-4 rounded-lg border-2 transition ${
-                playerConfig.mode === 'iframe'
-                  ? 'border-blue-500 bg-blue-500/20'
-                  : 'border-slate-600 bg-slate-700/50 hover:border-slate-500'
+                playerConfig.mode === "iframe"
+                  ? "border-[#E50914] bg-[#E50914]/10"
+                  : "border-[#333] bg-[#141414] hover:border-[#555]"
               }`}
             >
               <div className="text-white font-medium mb-1">iframe模式</div>
@@ -190,34 +199,32 @@ export function PlayerConfigTab({
               </div>
             </button>
             <button
-              onClick={() => handlePlayerModeChange('local')}
+              onClick={() => handlePlayerModeChange("local")}
               className={`p-4 rounded-lg border-2 transition ${
-                playerConfig.mode === 'local'
-                  ? 'border-blue-500 bg-blue-500/20'
-                  : 'border-slate-600 bg-slate-700/50 hover:border-slate-500'
+                playerConfig.mode === "local"
+                  ? "border-[#E50914] bg-[#E50914]/10"
+                  : "border-[#333] bg-[#141414] hover:border-[#555]"
               }`}
             >
               <div className="text-white font-medium mb-1">本地HLS播放器</div>
               <div className="text-xs text-slate-400">完全控制，进度记忆</div>
             </button>
             <button
-              onClick={() => handlePlayerModeChange('auto')}
+              onClick={() => handlePlayerModeChange("auto")}
               className={`p-4 rounded-lg border-2 transition ${
-                playerConfig.mode === 'auto'
-                  ? 'border-blue-500 bg-blue-500/20'
-                  : 'border-slate-600 bg-slate-700/50 hover:border-slate-500'
+                playerConfig.mode === "auto"
+                  ? "border-[#E50914] bg-[#E50914]/10"
+                  : "border-[#333] bg-[#141414] hover:border-[#555]"
               }`}
             >
               <div className="text-white font-medium mb-1">自动模式</div>
-              <div className="text-xs text-slate-400">
-                智能选择最佳播放器
-              </div>
+              <div className="text-xs text-slate-400">智能选择最佳播放器</div>
             </button>
           </div>
         </div>
 
         {/* 代理设置 */}
-        <div className="mb-6 flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
+        <div className="mb-6 flex items-center justify-between p-4 bg-[#141414] rounded-lg border border-[#333]">
           <div>
             <h3 className="text-white font-medium mb-1">启用视频代理</h3>
             <p className="text-xs text-slate-400">
@@ -227,12 +234,12 @@ export function PlayerConfigTab({
           <button
             onClick={() => handleToggleProxy(!playerConfig.enableProxy)}
             className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors ${
-              playerConfig.enableProxy ? 'bg-blue-600' : 'bg-slate-600'
+              playerConfig.enableProxy ? "bg-[#E50914]" : "bg-[#333]"
             }`}
           >
             <span
               className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${
-                playerConfig.enableProxy ? 'translate-x-7' : 'translate-x-1'
+                playerConfig.enableProxy ? "translate-x-7" : "translate-x-1"
               }`}
             />
           </button>
@@ -245,13 +252,13 @@ export function PlayerConfigTab({
             <div className="flex gap-2">
               <button
                 onClick={handleResetPlayers}
-                className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-sm rounded-lg transition"
+                className="px-4 py-2 bg-[#333] hover:bg-orange-600 text-slate-300 hover:text-white text-sm rounded-lg transition"
               >
                 🔄 重置为默认
               </button>
               <button
                 onClick={handleAddPlayer}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition"
+                className="px-4 py-2 bg-[#E50914] hover:bg-[#B20710] text-white text-sm rounded-lg transition"
               >
                 + 添加播放器
               </button>
@@ -262,7 +269,7 @@ export function PlayerConfigTab({
             {playerConfig.iframePlayers.map((player) => (
               <div
                 key={player.id}
-                className="p-4 bg-slate-700/50 rounded-lg border border-slate-600"
+                className="p-4 bg-[#141414] rounded-lg border border-[#333] hover:border-[#555] transition"
               >
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -270,10 +277,10 @@ export function PlayerConfigTab({
                       <span className="text-white font-medium">
                         {player.name}
                       </span>
-                      <span className="text-xs px-2 py-1 bg-slate-600 rounded text-slate-300">
+                      <span className="text-xs px-2 py-1 bg-slate-700 rounded text-slate-300">
                         优先级: {player.priority}
                       </span>
-                      <span className="text-xs px-2 py-1 bg-slate-600 rounded text-slate-300">
+                      <span className="text-xs px-2 py-1 bg-slate-700 rounded text-slate-300">
                         超时: {player.timeout}ms
                       </span>
                     </div>
@@ -288,15 +295,15 @@ export function PlayerConfigTab({
                       }
                       className={`px-3 py-1 text-xs rounded transition ${
                         player.enabled
-                          ? 'bg-green-600 hover:bg-green-700 text-white'
-                          : 'bg-slate-600 hover:bg-slate-500 text-slate-300'
+                          ? "bg-green-600 hover:bg-green-700 text-white"
+                          : "bg-[#333] hover:bg-[#444] text-slate-300"
                       }`}
                     >
-                      {player.enabled ? '已启用' : '已禁用'}
+                      {player.enabled ? "已启用" : "已禁用"}
                     </button>
                     <button
                       onClick={() => handleEditPlayer(player)}
-                      className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-xs rounded transition"
+                      className="px-3 py-1 bg-[#E50914] hover:bg-[#B20710] text-white text-xs rounded transition"
                     >
                       编辑
                     </button>
@@ -317,37 +324,35 @@ export function PlayerConfigTab({
         <div>
           <h3 className="text-white font-medium mb-4">本地播放器设置</h3>
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-[#141414] rounded-lg border border-[#333]">
               <div>
                 <span className="text-white text-sm">自动保存进度</span>
-                <p className="text-xs text-slate-400 mt-1">
-                  记住上次播放位置
-                </p>
+                <p className="text-xs text-slate-400 mt-1">记住上次播放位置</p>
               </div>
               <button
                 onClick={() =>
                   handleLocalPlayerSettingChange(
-                    'autoSaveProgress',
+                    "autoSaveProgress",
                     !playerConfig.localPlayerSettings.autoSaveProgress
                   )
                 }
                 className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                   playerConfig.localPlayerSettings.autoSaveProgress
-                    ? 'bg-blue-600'
-                    : 'bg-slate-600'
+                    ? "bg-[#E50914]"
+                    : "bg-[#333]"
                 }`}
               >
                 <span
                   className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
                     playerConfig.localPlayerSettings.autoSaveProgress
-                      ? 'translate-x-6'
-                      : 'translate-x-1'
+                      ? "translate-x-6"
+                      : "translate-x-1"
                   }`}
                 />
               </button>
             </div>
 
-            <div className="p-3 bg-slate-700/30 rounded-lg">
+            <div className="p-3 bg-[#141414] rounded-lg border border-[#333]">
               <label className="text-white text-sm block mb-2">
                 进度保存间隔（秒）
               </label>
@@ -356,25 +361,23 @@ export function PlayerConfigTab({
                 value={playerConfig.localPlayerSettings.progressSaveInterval}
                 onChange={(e) =>
                   handleLocalPlayerSettingChange(
-                    'progressSaveInterval',
+                    "progressSaveInterval",
                     parseInt(e.target.value) || 5
                   )
                 }
-                className="w-full px-3 py-2 bg-slate-900/50 border border-slate-600 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 bg-slate-900/50 border border-[#333] rounded text-white focus:outline-none focus:ring-2 focus:ring-[#E50914]"
                 min="1"
                 max="60"
               />
             </div>
 
-            <div className="p-3 bg-slate-700/30 rounded-lg">
-              <label className="text-white text-sm block mb-2">
-                主题颜色
-              </label>
+            <div className="p-3 bg-[#141414] rounded-lg border border-[#333]">
+              <label className="text-white text-sm block mb-2">主题颜色</label>
               <input
                 type="color"
                 value={playerConfig.localPlayerSettings.theme}
                 onChange={(e) =>
-                  handleLocalPlayerSettingChange('theme', e.target.value)
+                  handleLocalPlayerSettingChange("theme", e.target.value)
                 }
                 className="w-20 h-10 rounded cursor-pointer"
               />
@@ -387,7 +390,7 @@ export function PlayerConfigTab({
       <Modal
         isOpen={!!(editingPlayer || isAddingPlayer)}
         onClose={handleCancelPlayerEdit}
-        title={isAddingPlayer ? '添加iframe播放器' : '编辑iframe播放器'}
+        title={isAddingPlayer ? "添加iframe播放器" : "编辑iframe播放器"}
         size="lg"
       >
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
